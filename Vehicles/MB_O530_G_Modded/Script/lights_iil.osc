@@ -1,0 +1,1154 @@
+'##############
+'LightScript
+'##############
+
+'Simulates lighting system
+
+'(c) 11.05.2009 Rüdiger Hülsmann
+'(c) 25.07.2012 Marcel Kuhnt
+
+'Script Version: 1.1
+'Omsi release: 1.0
+
+'Needs:
+'- Cockpit (Batterietrennschalter)
+'- Door (Haltestellenbremse für Bremslicht)
+
+'Revision History:
+'- Rüdiger Hülsmann	11.05.2009	Bremslichter an Bremsdruck gekoppelt
+'- Marcel Kuhnt		10.06.2009	Schlüsselschalter-Logik für Stand- und Abbl.-licht verändert, Fernlicht hinzugefügt
+'- Marcel Kuhnt		10.08.2009	Added Revision History
+'- Marcel Kuhnt & RÜH	22.10.2009	Removed Light Switch Sound (added to cockpit)
+'- Rüdiger Hülsmann	28.10.2009	Added changeover variable for lower level and front right interior light (fixed light overlay problem)
+'- Rüdiger Hülsmann	18.07.2010	Light switch adapted to new ignition key algorithm
+'- Marcel Kuhnt		21.09.2010	Changed interpretation of AI_Light, light flasher
+'- RÜdiger Hülsmann	15.11.2010	AI-warning lights
+'- Rüdiger Hülsmann	21.11.2010	Interiour and warning lights independent from busbar_main, blinker fix (situation reload)
+'- Rüdiger Hülsmann	27.11.2010	Warning lights bug removed
+'- Rüdiger Hülsmann	08.12.2010	Light bug "untenohnevornerechts" removed
+'- Marcel Kuhnt		28.12.2010	Extracted AI lighting in separated macro (for using with AI script)
+'- Marcel Kuhnt		02.01.2011	Corrected AI warn blinker deactivation
+'- Rüdiger Hülsmann	02.01.2011	Driver light fixed
+'- Rüdiger Hülsmann	05.01.2011	Fog lamp
+'- Rüdiger Hülsmann	07.01.2011	highbeam switch sound
+'- Rüdiger Hülsmann	18.01.2011	Blinker switch on sound added
+'- Marcel Kuhnt		25.06.2011	Nebelscheinwerfer
+'- Marcel Kuhnt		25.06.2011	In HH kein Bremslicht bei aktiver Haltestellenbremse (jetzt per Konstante)
+'- Marcel Kuhnt		04.07.2011	Blinker Malfunction added
+'- Marcel Kuhnt		07.07.2011	Oberdecklicht ausgebaut
+'- Marcel Kuhnt		10.12.2011	Fahrerlicht- und Edge Light Malfunction added
+'- Marcel Kuhnt		09.07.2012	Auf aktuelle Busbar-Logik angepasst
+'- Marcel Kuhnt		12.07.2012	Leuchten verbrauchen Strom (generieren Leitwert)
+'- Marcel Kuhnt		30.10.2012	Leuchtenkonfiguration per Config-Datei
+'- Marcel Kuhnt		04.11.2012	Blinker blinkt nur schnell, wenn entsprechende Seite kaputt ist.
+'- Marcel Kuhnt		09.01.2013	Türleuchten sind jetzt hier
+'- Marcel Kuhnt		26.01.2013	Warnblinkanlage funktioniert auch bei ausgeschaltetem Strom
+'- Marcel Kuhnt		18.03.2013	Dreitürer
+
+'------------------------------------------------------------------------------------------
+
+{trigger:kw_fernlicht_toggle}
+	(L.L.lights_sw_fern) ! (S.L.lights_sw_fern)
+
+	(T.L.ev_wischerhebel)
+{end}
+
+{trigger:kw_fernlicht_toggle_off}
+	(L.L.light_mode) 1 <=
+	{if}
+		0 (S.L.lights_sw_fern)
+		(T.L.ev_wischerhebel)
+	{endif}
+{end}
+
+{trigger:kw_scheinwerfer_toggle}
+	(L.L.light_mode) 0 =
+	{if}
+		(L.L.light_mode) 2 + (S.L.light_mode)
+		3 <
+		{if}
+			(T.L.ev_licht_dreh)
+		{else}
+			(T.L.ev_licht_zieh)
+		{endif}
+	{else}
+		(L.L.light_mode) 1 + (S.L.light_mode)
+		3 <
+		{if}
+			(T.L.ev_licht_dreh)
+		{else}
+			(T.L.ev_licht_zieh)
+		{endif}
+	{endif}
+
+	(L.L.light_mode) 3 =
+	(L.L.var_hasfoglights) 0 = &&
+	{if}
+		4 (S.L.light_mode)
+	{endif}
+
+	(L.L.light_mode) 4 >
+	{if}
+		0 (S.L.light_mode)
+		(T.L.ev_licht_dreh)
+	{endif}
+{end}
+
+{trigger:kw_standlicht_toggle}
+	(L.L.light_mode) 1 =
+	{if}
+		0 (S.L.light_mode)
+	{else}
+		1 (S.L.light_mode)
+	{endif}
+	(T.L.ev_licht_dreh)
+{end}
+
+{trigger:blinker_off}
+	(L.L.lights_sw_blinker) 0 >
+	{if}
+			(T.L.ev_lights_blinker_swoff)
+			0 (S.L.lights_sw_blinker) 
+	{endif}
+{end}
+
+{trigger:blinker_left_move}
+	(L.L.lights_sw_blinker)
+	0 =
+	{if}
+		1 (S.L.lights_sw_blinker)
+		(T.L.ev_lights_blinker_swon)
+		(M.L.lights_calc_geberfaktor)
+		(M.L.lights_startblinkgeber)
+	{else}
+		(T.L.ev_lights_blinker_swoff)
+		0 (S.L.lights_sw_blinker) 
+	{endif}
+{end}
+
+
+{trigger:blinker_right_move}
+	(L.L.lights_sw_blinker)
+	0 =
+	{if}
+		2 (S.L.lights_sw_blinker)
+		(T.L.ev_lights_blinker_swon)
+		(M.L.lights_calc_geberfaktor)
+		(M.L.lights_startblinkgeber)
+	{else}
+		(T.L.ev_lights_blinker_swoff)
+		0 (S.L.lights_sw_blinker)  
+	{endif}
+{end}
+
+{trigger:blinker_left_set}
+	(L.L.lights_sw_blinker) 1 = !
+	{if}
+		(T.L.ev_lights_blinker_swon)
+	{endif}
+	1 (S.L.lights_sw_blinker)
+	(M.L.lights_calc_geberfaktor)
+	(M.L.lights_startblinkgeber)
+{end}
+
+{trigger:blinker_right_set}
+	(L.L.lights_sw_blinker) 2 = !
+	{if}
+		(T.L.ev_lights_blinker_swon)
+	{endif}
+	2 (S.L.lights_sw_blinker)
+	(M.L.lights_calc_geberfaktor)
+	(M.L.lights_startblinkgeber)
+{end}
+
+{trigger:blinker_warn_toggle}
+	(L.L.lights_sw_warnblinker) ! (S.L.lights_sw_warnblinker) 
+	{if}
+		(M.L.lights_calc_geberfaktor)
+		(M.L.lights_startblinkgeber)
+	{endif}
+
+	(L.L.cp_taster_warnblinker) ! (S.L.cp_taster_warnblinker)
+	1 =
+	{if}
+		(T.L.ev_VDV_on)
+	{else}
+		(T.L.ev_VDV_off)
+	{endif}
+{end}
+
+{macro:lights_frame}
+
+    (M.L.env_frame)
+
+	(M.L.lights_AI)
+
+	(M.L.lights_calc_geberfaktor)
+	(M.L.lights_runblinkgeber)
+
+'In HH kein Bremslicht bei aktiver Haltestellenbremse
+	(L.L.brake) 0.1 > (L.L.bremse_halte) (C.L.lights_brems_haltestellenbremse) && || (L.L.elec_busbar_main) sqr *
+		(S.L.lights_brems)
+		(S.L.lights_brems_2)
+
+	(L.L.antrieb_getr_gangwahl) 0 = (L.L.elec_busbar_main) sqr *
+		(S.L.lights_rueckfahr)
+
+	(L.L.lights_sw_blinker) 1 = (L.L.lights_sw_warnblinker) || (L.L.schulfahrschaltung) || (L.L.lights_blinkgeber) && (L.L.elec_busbar_avail) sqr *
+		(S.L.lights_blinker_l)
+
+	(L.L.lights_sw_blinker) 2 = (L.L.lights_sw_warnblinker) || (L.L.schulfahrschaltung) || (L.L.lights_blinkgeber) && (L.L.elec_busbar_avail) sqr *
+		(S.L.lights_blinker_r)
+
+'MCQ: AI-Blinkererkennung:
+	(L.L.AI) !
+	{if}
+		(L.L.lights_sw_blinker) 1 = (L.L.elec_busbar_main) sqr * (L.L.lights_sw_warnblinker) (L.L.elec_busbar_avail) sqr * max
+			(S.L.AI_Blinker_L)
+
+		(L.L.lights_sw_blinker) 2 = (L.L.elec_busbar_main) sqr * (L.L.lights_sw_warnblinker) (L.L.elec_busbar_avail) sqr * max
+			(S.L.AI_Blinker_R)
+
+		(L.L.lights_fern)
+		{if}
+			2
+		{else}
+			(L.L.lights_abbl)
+			{if}
+				1
+			{else}
+				(L.L.lights_stand)
+				{if}
+					0.5
+				{else}
+					0
+				{endif}
+			{endif}
+		{endif}
+		(S.L.AI_Light) 0 > (L.L.lights_beleuchtung_oberdeck) && (S.L.AI_Interiorlight)
+
+	{endif}
+
+'Automatische Blinkerabschaltung:
+
+	(L.L.Axle_Steering_0_L) (C.L.lights_blinkautom_minLenk) > (L.L.lights_sw_blinker) 2 = &&
+	{if}
+		1 (S.L.lights_blinkautom_r_armed)
+	{else}
+		(L.L.lights_blinkautom_r_armed)
+		{if}
+			(T.L.ev_lights_blinker_swoff)
+			0
+				(S.L.lights_sw_blinker) (S.L.lights_blinkgeber)
+				(S.L.lights_blinkautom_r_armed)
+		{endif}
+	{endif}
+
+	(L.L.Axle_Steering_0_L) /-/ (C.L.lights_blinkautom_minLenk) > (L.L.lights_sw_blinker) 1 = &&
+	{if}
+		1 (S.L.lights_blinkautom_l_armed)
+	{else}
+		(L.L.lights_blinkautom_l_armed)
+		{if}
+			(T.L.ev_lights_blinker_swoff)
+			0
+				(S.L.lights_sw_blinker) (S.L.lights_blinkgeber)
+				(S.L.lights_blinkautom_l_armed)
+		{endif}
+	{endif}
+
+'	Abschaltung Schulfahrschaltung
+
+	(L.L.lights_sw_blinker) 1 =
+	{if}
+		0 (S.L.schulfahrschaltung)
+	{endif}
+
+
+'	Beleuchtungsfunktionen
+
+    (M.L.passenger_cabin_lights_dimmable)
+
+	(L.L.elec_busbar_avail)
+	{if}
+		(L.L.light_mode) 0 =
+		{if}
+			0
+			(S.L.VDV_lightswitch_anim)
+			(S.L.lights_stand)
+			(S.L.lights_terminus)
+			(S.L.lights_rueck)
+			(S.L.lights_rueck_2)
+			(S.L.lights_abbl)
+			(S.L.lights_nebelschw)
+			(S.L.lights_nebelschluss)
+			(S.L.cp_light_pull)
+		{endif}
+		(L.L.light_mode) 1 =
+		{if}
+			(L.L.elec_busbar_main) sqr
+			(S.L.lights_stand)
+			(S.L.lights_rueck)
+			(S.L.lights_rueck_2)
+			1 (S.L.lights_terminus)
+			0.25 (S.L.VDV_lightswitch_anim)
+
+			0
+			(S.L.lights_nebelschw)
+			(S.L.lights_nebelschluss)
+			(S.L.lights_abbl)
+			(S.L.cp_light_pull)
+		{endif}
+		(L.L.light_mode) 2 =
+		{if}
+			(L.L.elec_busbar_main) sqr
+			(S.L.lights_abbl)
+			(S.L.lights_stand)
+			(S.L.lights_rueck)
+			(S.L.lights_rueck_2)
+			1 (S.L.lights_terminus)
+			0.5 (S.L.VDV_lightswitch_anim)
+
+			0
+			(S.L.lights_nebelschw)
+			(S.L.lights_nebelschluss)
+			(S.L.cp_light_pull)
+
+			(L.L.engine_n) 100 <
+			{if}
+				0 (S.L.lights_abbl)
+			{endif}
+		{endif}
+		(L.L.light_mode) 3 =
+		(L.L.var_hasfoglights) &&
+		{if}
+			(L.L.elec_busbar_main) sqr
+			(S.L.lights_abbl)
+			(S.L.lights_nebelschw)
+			(S.L.lights_stand)
+			(S.L.lights_rueck)
+			(S.L.lights_rueck_2)
+			1 (S.L.lights_terminus)
+			0.5 (S.L.cp_light_pull)
+
+			(L.L.engine_n) 100 <
+			{if}
+				0 (S.L.lights_abbl) (S.L.lights_nebelschw)
+			{endif}
+		{endif}
+		(L.L.light_mode) 4 =
+		{if}
+			(L.L.elec_busbar_main) sqr
+			(S.L.lights_abbl)
+			(S.L.lights_nebelschluss)
+			(S.L.lights_stand)
+			(S.L.lights_rueck)
+			(S.L.lights_rueck_2)
+			1 (S.L.lights_terminus)
+			1 (S.L.cp_light_pull)
+
+			(L.L.var_hasfoglights) 0 =
+			{if}
+				0 (S.L.lights_nebelschw)
+			{endif}
+			(L.L.engine_n) 100 <
+			{if}
+				0 (S.L.lights_abbl) (S.L.lights_nebelschw)
+			{endif}
+		{endif}
+
+
+'		Fernlicht
+		(L.L.lights_sw_fern)
+		{if}
+			(L.L.elec_busbar_main) sqr
+			(S.L.lights_fern)
+		{else}
+			0 (S.L.lights_fern)
+		{endif}	
+	{else}
+		0 (S.L.lights_stand) (S.L.lights_abbl) (S.L.lights_terminus) (S.L.lights_rueck) (S.L.lights_nebelschluss) (S.L.lights_nebelschw) (S.L.lights_fern)
+	{endif}
+
+
+'Spotselect wird neu berechnet, damit Glühbirnenschäden berücksichtigt werden:
+
+	-1 s0
+	(L.L.lights_fern) 0.5 >
+	(L.L.engine_n) 100 > &&	
+	{if}
+		0 s0
+	{else}
+		(L.L.lights_abbl_bulb_1) 0.5 > (L.L.lights_abbl_bulb_2) 0.5 > ||
+		{if}
+			1 s0
+		{endif}
+		(L.L.lights_nebelschw)
+		{if}
+			2 s0
+		{endif}
+	{endif}
+	l0 (S.L.Spot_Select)
+			
+
+
+	(L.L.elec_busbar_avail)
+	{if}
+'		Beleuchtung Stufe I
+		(L.L.cp_licht_oberdeck_sw)
+		{if}
+			1 (S.L.lights_beleuchtung_oberdeck)
+			0 (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode)
+		{endif}
+
+'		Beleuchtung Stufe II
+		(L.L.cp_licht_unterdeck_sw)
+		{if}
+			(L.L.engine_n) 400 >
+			{if}
+				1 (S.L.lights_beleuchtung_oberdeck)
+                (L.L.passenger_cabin_lights_dimmed)
+                {if}
+                    (L.L.cvar__lights__passenger_cabin__dimming__op_mode) s0 !
+                    {if}
+                        1 (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_mode)
+                        0 (S.L.lights_beleuchtung_untenrechts_2)
+                    {else}
+                        l0 1 =
+                        {if}
+                            1 (S.L.lights_beleuchtung_unterdeck)
+                            0 (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode)
+                        {else}
+                            0 (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode)
+                        {endif}
+                    {endif}
+                {else}
+                    0 (S.L.lights_beleuchtung_untenrechts)
+                    1 (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts_2)
+                    2 (S.L.lights_beleuchtung_untenrechts_mode)
+                {endif}
+			{else}
+				0 (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode)
+				1 (S.L.lights_beleuchtung_oberdeck)
+			{endif}
+		{endif}
+
+		(L.L.cp_licht_unterdeck_sw) !
+		(L.L.cp_licht_oberdeck_sw) ! &&
+		{if}
+            0 (S.L.lights_beleuchtung_oberdeck) (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode)
+		{endif}
+
+'		Fahrerlicht und Türleuchten
+
+		(L.L.cp_fahrerlicht_sw) (L.L.door_spotlight_1) ||
+		(L.L.elec_busbar_main) &&
+		{if}	
+			1 (S.L.lights_fahrerlicht)
+		{else}
+			0 (S.L.lights_fahrerlicht)
+		{endif}
+
+'	Beleuchtung der Einstiege
+
+(L.L.elec_busbar_main)
+{if}
+	(L.L.Door_Error_Count) (C.L.Tuerfehlertoleranz) (L.L.wearlifespan) * >
+	(L.L.bremse_p_tank04) 550000 < ||
+	{if}
+		(L.L.Tuerfehler_blinkgeber) (L.S.Timegap) + 1 min (S.L.Tuerfehler_blinkgeber)
+		0.5 <
+		{if}
+			1 (S.L.door_light_1)
+		{else}
+			0 (S.L.door_light_1)
+		{endif}
+		(L.L.Tuerfehler_blinkgeber) 1 =
+		{if}
+			0 (S.L.Tuerfehler_blinkgeber)
+		{endif}
+	{else}
+		(L.L.door_0) 0 > (L.L.door_1) 0 > ||
+		{if}
+			1 (S.L.door_light_1)
+			0 (S.L.light_timer1)
+			(L.L.lights_stand)
+			{if}
+				1 (S.L.door_spotlight_1)
+			{else}
+				0 (S.L.door_spotlight_1)
+			{endif}
+		{else}
+			(L.L.light_timer1) (L.S.timegap) + 2 min (S.L.light_timer1)
+			2 =
+			{if}
+				0 (S.L.door_spotlight_1)
+			{endif}
+			0 (S.L.door_light_1)
+		{endif}
+	{endif}
+	(L.L.Door2_Error_Count) (C.L.Tuerfehlertoleranz) (L.L.wearlifespan) * >
+	(L.L.bremse_p_tank04) 550000 < ||
+	{if}
+		(L.L.Tuerfehler_blinkgeber2) (L.S.Timegap) + 1 min (S.L.Tuerfehler_blinkgeber2)
+		0.5 <
+		{if}
+			1 (S.L.door_light_2)
+		{else}
+			0 (S.L.door_light_2)
+		{endif}
+		(L.L.Tuerfehler_blinkgeber2) 1 =
+		{if}
+			0 (S.L.Tuerfehler_blinkgeber2)
+		{endif}
+	{else}
+		(L.L.door_2) 0 > (L.L.door_3) 0 > ||
+		{if}
+			1 (S.L.door_light_2)
+			0 (S.L.light_timer2)
+			(L.L.lights_stand)
+			{if}
+				1 (S.L.door_spotlight_2)
+			{else}
+				0 (S.L.door_spotlight_2)
+			{endif}
+		{else}
+			(L.L.light_timer2) (L.S.timegap) + 2 min (S.L.light_timer2)
+			2 =
+			{if}
+				0 (S.L.door_spotlight_2)
+			{endif}
+			0 (S.L.door_light_2)
+		{endif}
+	{endif}
+	(L.L.Door3_Error_Count) (C.L.Tuerfehlertoleranz) (L.L.wearlifespan) * >
+	(L.L.bremse_p_tank04) 550000 < ||
+	{if}
+		(L.L.Tuerfehler_blinkgeber3) (L.S.Timegap) + 1 min (S.L.Tuerfehler_blinkgeber3)
+		0.5 <
+		{if}
+			1 (S.L.door_light_3)
+		{else}
+			0 (S.L.door_light_3)
+		{endif}
+		(L.L.Tuerfehler_blinkgeber3) 1 =
+		{if}
+			0 (S.L.Tuerfehler_blinkgeber3)
+		{endif}
+	{else}
+		(L.L.door_4) 0 > (L.L.door_5) 0 > ||
+		{if}
+			1 (S.L.door_light_3)
+			0 (S.L.light_timer3)
+			(L.L.lights_stand)
+			{if}
+				1 (S.L.door_spotlight_3)
+			{else}
+				0 (S.L.door_spotlight_3)
+			{endif}
+		{else}
+			(L.L.light_timer3) (L.S.timegap) + 2 min (S.L.light_timer3)
+			2 =
+			{if}
+				0 (S.L.door_spotlight_3)
+			{endif}
+			0 (S.L.door_light_3)
+		{endif}
+	{endif}
+	(L.L.Door4_Error_Count) (C.L.Tuerfehlertoleranz) (L.L.wearlifespan) * >
+	(L.L.bremse_p_tank04) 550000 < ||
+	{if}
+		(L.L.Tuerfehler_blinkgeber4) (L.S.Timegap) + 1 min (S.L.Tuerfehler_blinkgeber4)
+		0.5 <
+		{if}
+			1 (S.L.door_light_4)
+		{else}
+			0 (S.L.door_light_4)
+		{endif}
+		(L.L.Tuerfehler_blinkgeber4) 1 =
+		{if}
+			0 (S.L.Tuerfehler_blinkgeber4)
+		{endif}
+	{else}
+		(L.L.door_6) 0 > (L.L.door_7) 0 > ||
+		{if}
+			1 (S.L.door_light_4)
+			0 (S.L.light_timer4)
+			(L.L.lights_stand)
+			{if}
+				1 (S.L.door_spotlight_4)
+			{else}
+				0 (S.L.door_spotlight_4)
+			{endif}
+		{else}
+			(L.L.light_timer4) (L.S.timegap) + 2 min (S.L.light_timer4)
+			2 =
+			{if}
+				0 (S.L.door_spotlight_4)
+			{endif}
+			0 (S.L.door_light_4)
+		{endif}
+	{endif}
+{else}
+	0 (S.L.door_light_1) (S.L.door_light_2) (S.L.door_light_3) (S.L.door_light_4)
+{endif}
+
+{else}
+	0 (S.L.lights_fahrerlicht) (S.L.lights_beleuchtung_oberdeck) (S.L.lights_beleuchtung_unterdeck) (S.L.lights_beleuchtung_untenrechts) (S.L.lights_beleuchtung_untenrechts_2) (S.L.lights_beleuchtung_untenrechts_mode) (S.L.door_light_1) (S.L.door_light_2) (S.L.door_light_3) (S.L.door_light_4)
+{endif}
+
+	(M.L.lights_bulbcalc)
+
+'Leitwert generieren:
+
+	(L.L.elec_busbar_Rinv_summe)
+		(L.L.lights_rueck) 0 > (C.L.lights_rueck_Rinv) * +
+		(L.L.lights_rueck_2) 0 > (C.L.lights_rueck_2_Rinv) * +
+		(L.L.lights_stand) 0 > (C.L.lights_stand_Rinv) * +
+		(L.L.lights_brems) 0 > (C.L.lights_brems_Rinv) * +
+		(L.L.lights_brems_2) 0 > (C.L.lights_brems_2_Rinv) * +
+		(L.L.lights_rueckfahr) 0 > (C.L.lights_rueckfahr_Rinv) * +
+		(L.L.lights_nebelschw) 0 > (C.L.lights_nebelschw_Rinv) * +
+		(L.L.lights_fern) 0 > (C.L.lights_fern_Rinv) * +
+		(L.L.lights_beleuchtung_unterdeck) 0 > (C.L.lights_beleuchtung_unterdeck_Rinv) * +
+		(L.L.lights_beleuchtung_untenrechts) 0 > (C.L.lights_beleuchtung_untenrechts_Rinv) 3 / * +
+        (L.L.lights_beleuchtung_untenrechts_2) 0 > (C.L.lights_beleuchtung_untenrechts_Rinv) * +
+		(L.L.lights_beleuchtung_oberdeck) 0 > (C.L.lights_beleuchtung_oberdeck_Rinv) * +
+
+
+		(L.L.lights_abbl_bulb_1) 0 > (C.L.lights_abbl_Rinv_bulb) * +
+		(L.L.lights_abbl_bulb_2) 0 > (C.L.lights_abbl_Rinv_bulb) * +
+		(L.L.lights_blinker_l_bulb_1) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_l_bulb_2) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_l_bulb_3) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_l_bulb_4) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_l_bulb_5) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_r_bulb_1) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_r_bulb_2) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_r_bulb_3) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_r_bulb_4) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_blinker_r_bulb_5) 0 > (C.L.lights_blinker_Rinv_bulb) * +
+		(L.L.lights_fahrerlicht_bulb) 0 > (C.L.lights_fahrerlicht_Rinv_bulb) * +
+		(L.L.lights_edge_front_bulb_l) 0 > (C.L.lights_edge_Rinv_bulb) * +
+		(L.L.lights_edge_front_bulb_r) 0 > (C.L.lights_edge_Rinv_bulb) * +
+	(S.L.elec_busbar_Rinv_summe)
+
+{end}
+
+
+
+{macro:lights_AI}
+'AI-Einfluss auf Beleuchtung:
+	(L.L.AI)
+	{if}
+		(L.L.AI_Blinker_L) (L.L.AI_Engine) 0.5 > &&
+		{if}
+			1 (S.L.lights_sw_blinker)
+			(M.L.lights_startblinkgeber)
+		{else} 
+			(L.L.AI_Blinker_R) (L.L.AI_Engine) 0.5 > && 
+			{if}
+				2 (S.L.lights_sw_blinker)
+				(M.L.lights_startblinkgeber)
+			{else}
+				0 (S.L.lights_sw_blinker)
+			{endif}
+
+		{endif}
+		
+		(L.L.AI_Blinker_R) (L.L.AI_Blinker_L) &&
+		{if}
+			1 (S.L.lights_sw_warnblinker)
+			(M.L.lights_startblinkgeber)
+		{else}
+			0 (S.L.lights_sw_warnblinker)
+		{endif}
+
+		(L.L.AI_Light) 
+		{if}
+			(L.L.AI_Light) 0.75 >
+			{if}
+				2 (S.L.Light_Mode)
+			{else}
+				1 (S.L.Light_Mode)
+			{endif}
+
+			(L.L.AI_Light) 1.5 > (S.L.lights_sw_fern)
+			1 (S.L.cp_licht_unterdeck_sw)
+		{else}
+			0 (S.L.Light_Mode) (S.L.lights_sw_fern) (S.L.cp_licht_unterdeck_sw)
+		{endif}
+	{endif}
+{end}
+
+
+
+{macro:lights_init}
+	0 (S.L.cp_taster_warnblinker)
+	-1 (S.L.Spot_Select)
+	(M.L.lights_lifetimeinit)
+
+    (C.L.lights__passenger_cabin__dimming__op_mode) s0 l0 1 = ! && l0 2 = ! &&
+    {if}
+        0
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__op_mode)
+    
+    (C.L.lights__passenger_cabin__dimming__door_dependence) s0 l0 1 = ! &&
+    {if}
+        1
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__door_dependence)
+
+    (C.L.lights__passenger_cabin__dimming__min_velocity) s0 -1 = ! l0 0.1 <= &&
+    {if}
+        7
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__min_velocity)
+
+    (C.L.lights__passenger_cabin__dimming__delay) s0 0 <
+    {if}
+        5
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__delay)
+
+    (C.L.lights__passenger_cabin__dimming__ext_lights_dependence) s0 l0 1 = ! && l0 2 = ! && l0 3 = ! &&
+    {if}
+        0
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__ext_lights_dependence)
+
+    (C.L.lights__passenger_cabin__dimming__min_ext_lighting_level) s0 l0 1 = ! &&
+    {if}
+        0
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__min_ext_lighting_level)
+
+    (C.L.lights__passenger_cabin__dimming__min_env_brightness) s0 0.65 < l0 1 > ||
+    {if}
+        0.7
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__min_env_brightness)
+
+    (C.L.lights__passenger_cabin__dimming__light_sensor_brightness_tolerance) s0 1 <
+    {if}
+        120
+    {else}
+        l0
+    {endif}
+    (S.L.cvar__lights__passenger_cabin__dimming__light_sensor_brightness_tolerance) s0
+
+    (C.L.lights__passenger_cabin__dimming__light_sensor_darkness_tolerance) s1 0 <
+    {if}
+        30
+    {else}
+        l1
+    {endif}
+    l0 1 - min (S.L.cvar__lights__passenger_cabin__dimming__light_sensor_darkness_tolerance)
+
+    -1 (S.L.passenger_cabin_light_dimming_light_sensor_timer) (S.L.passenger_cabin_light_dimming_timer)
+    0 (S.L.env_initialized)
+{end}
+
+{macro:lights_startblinkgeber}
+
+	(L.L.elec_busbar_main) 0.4 >  (L.L.elec_busbar_avail) 0.4 >  (L.L.lights_sw_warnblinker) && || 
+	(L.L.elec_busbar_main) 0.4 >  (L.L.elec_busbar_avail) 0.4 >  (L.L.schulfahrschaltung) && || 
+	(L.L.lights_blinker_running) ! &&
+	{if}
+		(T.L.ev_lights_blinker_on)
+		(C.L.lights_blinkertime_firston) (L.L.lights_blinkgeber_faktor) * (S.L.lights_blinkgeber_timegap) 
+		1 (S.L.lights_blinkgeber) (S.L.lights_blinker_running)
+		0 (S.L.lights_blinker_runtime)
+	{endif}
+{end}
+
+{macro:lights_runblinkgeber}
+	(L.L.elec_busbar_main) 0.4 >  (L.L.lights_sw_blinker) &&
+	(L.L.elec_busbar_avail) 0.4 >  (L.L.lights_sw_warnblinker) && ||
+	(L.L.elec_busbar_avail) 0.4 >  (L.L.schulfahrschaltung) && ||
+	{if}
+
+		(L.S.Timegap) (L.L.lights_blinker_runtime) + (S.L.lights_blinker_runtime)
+
+		(L.L.lights_blinker_runtime) (L.L.lights_blinkgeber_timegap) > (L.L.lights_sw_blinker) (L.L.lights_sw_warnblinker) || (L.L.schulfahrschaltung) || && 
+		{if}
+			(L.L.lights_blinkgeber) ! (S.L.lights_blinkgeber)
+			{if}
+				(T.L.ev_lights_blinker_on)
+				(C.L.lights_blinkertime_on)
+			{else}
+				(T.L.ev_lights_blinker_off)
+				(C.L.lights_blinkertime_off)
+			{endif}
+
+			(L.L.lights_blinkgeber_faktor) *
+
+			(S.L.lights_blinkgeber_timegap)
+			0 (S.L.lights_blinker_runtime)
+		{endif}
+
+		(L.L.lights_sw_warnblinker) (L.L.schulfahrschaltung) ||
+		{if}
+			(L.L.lights_blinkgeber) (S.L.lights_warnblinkgeber)
+		{else}
+			0 (S.L.lights_warnblinkgeber)
+		{endif}
+	{else}
+		0 (S.L.lights_blinkgeber) (S.L.lights_warnblinkgeber) (S.L.lights_blinker_runtime) (S.L.lights_blinker_running)
+	{endif}
+
+
+
+	
+{end}
+
+{macro:lights_lifetimecalc}
+
+{end}
+
+{macro:lights_malfunction_minute_trigger}
+	0.001666667 s0
+	(L.L.lights_abbl_bulb_1) 0.3 >= {if} (L.L.lights_abbl_bulb_1_lifetime) l0 - (S.L.lights_abbl_bulb_1_lifetime) {endif}
+	(L.L.lights_abbl_bulb_2) 0.3 >= {if} (L.L.lights_abbl_bulb_2_lifetime) l0 - (S.L.lights_abbl_bulb_2_lifetime) {endif}
+	(L.L.lights_edge_front_bulb_l) 0.3 >= {if} (L.L.lights_edge_front_bulb_l_lifetime) l0 - (S.L.lights_edge_front_bulb_l_lifetime) {endif}
+	(L.L.lights_edge_front_bulb_r) 0.3 >= {if} (L.L.lights_edge_front_bulb_r_lifetime) l0 - (S.L.lights_edge_front_bulb_r_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_1) 0.3 >= {if} (L.L.lights_blinker_l_bulb_1_lifetime) l0 - (S.L.lights_blinker_l_bulb_1_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_2) 0.3 >= {if} (L.L.lights_blinker_l_bulb_2_lifetime) l0 - (S.L.lights_blinker_l_bulb_2_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_3) 0.3 >= {if} (L.L.lights_blinker_l_bulb_3_lifetime) l0 - (S.L.lights_blinker_l_bulb_3_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_4) 0.3 >= {if} (L.L.lights_blinker_l_bulb_4_lifetime) l0 - (S.L.lights_blinker_l_bulb_4_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_5) 0.3 >= {if} (L.L.lights_blinker_l_bulb_5_lifetime) l0 - (S.L.lights_blinker_l_bulb_5_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_1) 0.3 >= {if} (L.L.lights_blinker_r_bulb_1_lifetime) l0 - (S.L.lights_blinker_r_bulb_1_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_2) 0.3 >= {if} (L.L.lights_blinker_r_bulb_2_lifetime) l0 - (S.L.lights_blinker_r_bulb_2_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_3) 0.3 >= {if} (L.L.lights_blinker_r_bulb_3_lifetime) l0 - (S.L.lights_blinker_r_bulb_3_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_4) 0.3 >= {if} (L.L.lights_blinker_r_bulb_4_lifetime) l0 - (S.L.lights_blinker_r_bulb_4_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_5) 0.3 >= {if} (L.L.lights_blinker_r_bulb_5_lifetime) l0 - (S.L.lights_blinker_r_bulb_5_lifetime) {endif}
+	(L.L.lights_fahrerlicht_bulb) 0.3 >= {if} (L.L.lights_fahrerlicht_bulb_lifetime) l0 - (S.L.lights_fahrerlicht_bulb_lifetime) {endif}
+{end}
+
+{macro:lights_bulbcalc}
+	(L.L.lights_blinker_l_bulb_1_lifetime) 0 >= {if} (L.L.lights_blinker_l) {else} 0 {endif} (S.L.lights_blinker_l_bulb_1)
+	(L.L.lights_blinker_l_bulb_2_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 2 >= && {if} (L.L.lights_blinker_l) {else} 0 {endif} (S.L.lights_blinker_l_bulb_2)
+	(L.L.lights_blinker_l_bulb_3_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 3 >= && {if} (L.L.lights_blinker_l) {else} 0 {endif} (S.L.lights_blinker_l_bulb_3)
+	(L.L.lights_blinker_l_bulb_4_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 4 >= && {if} (L.L.lights_blinker_l) {else} 0 {endif} (S.L.lights_blinker_l_bulb_4)
+	(L.L.lights_blinker_l_bulb_5_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 5 >= && {if} (L.L.lights_blinker_l) {else} 0 {endif} (S.L.lights_blinker_l_bulb_5)
+	(L.L.lights_blinker_r_bulb_1_lifetime) 0 >= {if} (L.L.lights_blinker_r) {else} 0 {endif} (S.L.lights_blinker_r_bulb_1)
+	(L.L.lights_blinker_r_bulb_2_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 2 >= && {if} (L.L.lights_blinker_r) {else} 0 {endif} (S.L.lights_blinker_r_bulb_2)
+	(L.L.lights_blinker_r_bulb_3_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 3 >= && {if} (L.L.lights_blinker_r) {else} 0 {endif} (S.L.lights_blinker_r_bulb_3)
+	(L.L.lights_blinker_r_bulb_4_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 4 >= && {if} (L.L.lights_blinker_r) {else} 0 {endif} (S.L.lights_blinker_r_bulb_4)
+	(L.L.lights_blinker_r_bulb_5_lifetime) 0 >= (C.L.lights_blinker_bulb_cnt) 5 >= && {if} (L.L.lights_blinker_r) {else} 0 {endif} (S.L.lights_blinker_r_bulb_5)
+	(L.L.lights_fahrerlicht_bulb_lifetime) 0 >= {if} (L.L.lights_fahrerlicht) {else} 0 {endif} (S.L.lights_fahrerlicht_bulb)
+
+	(L.L.lights_abbl_bulb_1_lifetime) 0 >= {if} (L.L.lights_abbl) {else} 0 {endif} (S.L.lights_abbl_bulb_1)
+	(L.L.lights_abbl_bulb_2_lifetime) 0 >= {if} (L.L.lights_abbl) {else} 0 {endif} (S.L.lights_abbl_bulb_2)
+
+	(C.L.lights_edge_avl)
+	{if}
+		(L.L.lights_edge_front_bulb_l_lifetime) 0 >= {if} (L.L.lights_stand) {else} 0 {endif} (S.L.lights_edge_front_bulb_l)
+		(L.L.lights_edge_front_bulb_r_lifetime) 0 >= {if} (L.L.lights_stand) {else} 0 {endif} (S.L.lights_edge_front_bulb_r)
+	{endif}
+{end}
+
+{macro:lights_lifetimeinit}
+	(C.L.lights_bulb_frontlight_livetime_h) random (L.L.wearlifespan) * (S.L.lights_abbl_bulb_1_lifetime)
+	(C.L.lights_bulb_frontlight_livetime_h) random (L.L.wearlifespan) * (S.L.lights_abbl_bulb_2_lifetime)
+
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_edge_front_bulb_l_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_edge_front_bulb_r_lifetime)
+
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_l_bulb_1_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_l_bulb_2_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_l_bulb_3_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_l_bulb_4_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_l_bulb_5_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_r_bulb_1_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_r_bulb_2_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_r_bulb_3_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_r_bulb_4_lifetime)
+	(C.L.lights_bulb_signal_livetime_h) random (L.L.wearlifespan) * (S.L.lights_blinker_r_bulb_5_lifetime)
+
+	(C.L.lights_bulb_inside_livetime_h) random (L.L.wearlifespan) * (S.L.lights_fahrerlicht_bulb_lifetime)
+{end}
+
+{macro:lights_repair}
+	(L.L.lights_abbl_bulb_1_lifetime) 0 < {if} (C.L.lights_bulb_frontlight_livetime_h) random (S.L.lights_abbl_bulb_1_lifetime) {endif}
+	(L.L.lights_abbl_bulb_2_lifetime) 0 < {if} (C.L.lights_bulb_frontlight_livetime_h) random (S.L.lights_abbl_bulb_2_lifetime) {endif}
+
+	(L.L.lights_edge_front_bulb_l_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_edge_front_bulb_l_lifetime) {endif}	
+	(L.L.lights_edge_front_bulb_r_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_edge_front_bulb_r_lifetime) {endif}	
+	(L.L.lights_blinker_l_bulb_1_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_l_bulb_1_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_2_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_l_bulb_2_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_3_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_l_bulb_3_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_4_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_l_bulb_4_lifetime) {endif}
+	(L.L.lights_blinker_l_bulb_5_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_l_bulb_5_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_1_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_r_bulb_1_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_2_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_r_bulb_2_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_3_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_r_bulb_3_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_4_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_r_bulb_4_lifetime) {endif}
+	(L.L.lights_blinker_r_bulb_5_lifetime) 0 < {if} (C.L.lights_bulb_signal_livetime_h) random (S.L.lights_blinker_r_bulb_5_lifetime) {endif}
+
+	(L.L.lights_fahrerlicht_bulb_lifetime) 0 < {if} (C.L.lights_bulb_inside_livetime_h) random (S.L.lights_fahrerlicht_bulb_lifetime) {endif}
+{end}
+
+{macro:lights_repair_timecalc}
+
+'Berechnung der Zeit, die benötigt wird, um die Schäden zu reparieren:
+
+	s0
+
+	(L.L.lights_blinker_l_bulb_1_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_l_bulb_2_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_l_bulb_3_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_l_bulb_4_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_l_bulb_5_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_r_bulb_1_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_r_bulb_2_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_r_bulb_3_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_r_bulb_4_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_blinker_r_bulb_5_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_fahrerlicht_bulb_lifetime) 0 < 5 * l0 + s0
+
+	(L.L.lights_abbl_bulb_1_lifetime) 0 < 5 * l0 + s0
+	(L.L.lights_abbl_bulb_2_lifetime) 0 < 5 * l0 + s0
+
+	(L.L.lights_edge_front_bulb_l_lifetime) 0 < 3 * l0 + s0
+	(L.L.lights_edge_front_bulb_r_lifetime) 0 < 3 * l0 + s0
+
+	l0
+{end}
+
+{macro:lights_calc_geberfaktor}
+'Wenn eine Birne kaputt ist, dann schneller blinken:
+	(L.L.lights_blinker_l_bulb_1_lifetime) 0 <=
+	(L.L.lights_blinker_l_bulb_2_lifetime) 0 <= ||
+	(L.L.lights_blinker_l_bulb_3_lifetime) 0 <= ||
+	(L.L.lights_blinker_l_bulb_4_lifetime) 0 <= ||
+	(L.L.lights_blinker_l_bulb_5_lifetime) 0 <= ||
+	(L.L.lights_sw_blinker) 1 = (L.L.lights_sw_warnblinker) || &&
+
+	(L.L.lights_blinker_r_bulb_1_lifetime) 0 <=
+	(L.L.lights_blinker_r_bulb_2_lifetime) 0 <= ||
+	(L.L.lights_blinker_r_bulb_3_lifetime) 0 <= ||
+	(L.L.lights_blinker_r_bulb_4_lifetime) 0 <= ||
+	(L.L.lights_blinker_r_bulb_5_lifetime) 0 <= || s5
+	(L.L.lights_sw_blinker) 2 = (L.L.lights_sw_warnblinker) || && ||
+	{if}
+		0.5
+	{else}
+		1
+	{endif}
+	(S.L.lights_blinkgeber_faktor)
+{end}
+
+{macro:env_frame}
+    (L.L.env_initialized)
+    {if}
+        (M.L.sun_alt_frame)
+        (M.L.precip_rate_frame)
+        (M.L.env_brightness_frame)
+    {endif}
+{end}
+
+{macro:sun_alt_frame}
+    (L.S.SunAlt) -90 max 90 min (S.L._sun_alt)
+{end}
+
+{macro:precip_rate_frame}
+    (L.L.PrecipType) 0 max 2 min (L.L.PrecipRate) 0 max * (S.L._precip_rate)
+{end}
+
+{macro:env_brightness_frame}
+    (L.L._sun_alt) (F.L.env_brightness_max_f_solar_elevation_angle) (L.L.Envir_Brightness) 0 max 1 min min (L.L._precip_rate)
+        (F.L.env_brightness_reduction_f_precip_rate) - 0 max s0
+    (L.L.AI) (L.L.AI_Light) 0 max &&
+    {if}
+        l0 0.65 min s0
+    {endif}
+    l0 (S.L._env_brightness)
+{end}
+
+{macro:passenger_cabin_lights_dimmable}
+    (L.L.env_initialized)
+    {if}
+        (M.L.passenger_cabin_lights_dimmable__check_env)
+        (L.L.elec_busbar_avail) (L.L.engine_n) 400 > && (L.L.cp_licht_unterdeck_sw) &&
+        {if}
+            (M.L.passenger_cabin_lights_dimmable__check_doors)
+            (M.L.passenger_cabin_lights_dimmable__check_ext_lights)
+            (M.L.passenger_cabin_lights_dimmable__check_velocity)
+            (M.L.passenger_cabin_lights_dimmable__adjust_context_per_settings)
+            (M.L.passenger_cabin_lights_dimmable__actualize)
+        {else}
+            (M.L.passenger_cabin_lights_dimmable__reset)
+        {endif}
+    {else}
+        1 (S.L.env_initialized)
+    {endif}
+{end}
+
+{macro:passenger_cabin_lights_dimmable__check_doors}
+    (L.L.door_0) ! (L.L.door_1) ! && (L.L.doorTarget_0) ! && (L.L.light_timer1) 2 = && s0
+    {if}
+        (L.L.cvar__lights__passenger_cabin__dimming__door_dependence)
+        {if}
+            (L.L.door_2) ! (L.L.door_3) ! && (L.L.doorTarget_23) ! && (L.L.light_timer2) 2 = && (L.L.door_4) ! && (L.L.door_5) ! && (L.L.doorTarget_45) ! && (L.L.light_timer3) 2 = && (L.L.door_6) ! && (L.L.door_7) ! && (L.L.doorTarget_67) ! && (L.L.light_timer4) 2 = && s0
+        {endif}
+    {endif}
+{end}
+
+{macro:passenger_cabin_lights_dimmable__check_ext_lights}
+    (L.L.cvar__lights__passenger_cabin__dimming__min_ext_lighting_level) !
+    {if}
+        (L.L.lights_stand)
+    {else}
+        (L.L.lights_abbl)
+    {endif}
+    s1
+{end}
+
+{macro:passenger_cabin_lights_dimmable__check_env}
+    (L.L.env_initialized) 1 =
+    {if}
+        (L.L._env_brightness) (L.L.cvar__lights__passenger_cabin__dimming__min_env_brightness) < (S.L.passenger_cabin_light_dimming_light_sensor_env_dark) s2
+        2 (S.L.env_initialized)
+    {else}
+        (L.L.passenger_cabin_light_dimming_light_sensor_env_dark) s2 (L.L._env_brightness) (L.L.cvar__lights__passenger_cabin__dimming__min_env_brightness) >= &&
+        {if}
+            (L.L.passenger_cabin_light_dimming_light_sensor_timer) s7 -1 =
+            {if}
+                (L.S.GetTime) (L.L.cvar__lights__passenger_cabin__dimming__light_sensor_brightness_tolerance) + (S.L.passenger_cabin_light_dimming_light_sensor_timer) s7
+            {endif}
+            (L.S.GetTime) l7 >=
+            {if}
+                -1 (S.L.passenger_cabin_light_dimming_light_sensor_timer)
+                0 (S.L.passenger_cabin_light_dimming_light_sensor_env_dark) s2
+            {endif}
+        {else}
+            l2 ! (L.L._env_brightness) (L.L.cvar__lights__passenger_cabin__dimming__min_env_brightness) < &&
+            {if}
+                (L.L.passenger_cabin_light_dimming_light_sensor_timer) s7 -1 =
+                {if}
+                    (L.S.GetTime) (L.L.cvar__lights__passenger_cabin__dimming__light_sensor_darkness_tolerance) + (S.L.passenger_cabin_light_dimming_light_sensor_timer) s7
+                {endif}
+                (L.S.GetTime) l7 >=
+                {if}
+                    -1 (S.L.passenger_cabin_light_dimming_light_sensor_timer)
+                    1 (S.L.passenger_cabin_light_dimming_light_sensor_env_dark) s2
+                {endif}
+            {else}
+                -1 (S.L.passenger_cabin_light_dimming_light_sensor_timer)
+            {endif}
+        {endif}
+    {endif}
+{end}
+
+{macro:passenger_cabin_lights_dimmable__check_velocity}
+    (L.L.cvar__lights__passenger_cabin__dimming__min_velocity) s3 -1 =
+    {if}
+        1
+    {else}
+        (L.L.velocity) l3 >
+    {endif}
+    s3
+{end}
+
+{macro:passenger_cabin_lights_dimmable__adjust_context_per_settings}
+    (L.L.cvar__lights__passenger_cabin__dimming__ext_lights_dependence) s4 !
+    {if}
+        l1
+    {else}
+        l4 1 =
+        {if}
+            l2
+        {else}
+            l4 2 =
+            {if}
+                l1 l2 ||
+            {else}
+                l1 l2 &&
+            {endif}
+        {endif}
+    {endif}
+    s4
+{end}
+
+{macro:passenger_cabin_lights_dimmable__actualize}
+    (L.L.passenger_cabin_light_dimming_timer) s5
+    (L.L.passenger_cabin_lights_dimming_target) s2
+    (L.L.passenger_cabin_lights_dimmed) s1 !
+    {if}
+        l4
+        {if}
+            l0 !
+            {if}
+                1 s2
+            {else}
+                l2 1 =
+                {if}
+                    l3
+                    {if}
+                        2 s2
+                    {endif}
+                {else}
+                    l2 !
+                    {if}
+                        3 s2
+                    {endif}
+                {endif}
+            {endif}
+            l2 3 =
+            {if}
+                1 s1
+                0 s2
+                -1 s5
+            {else}
+                l2 2 =
+                {if}
+                    (L.S.GetTime) s6
+                    l5 -1 =
+                    {if}
+                        l6 (L.L.cvar__lights__passenger_cabin__dimming__delay) + s5
+                    {endif}
+                    l6 l5 >=
+                    {if}
+                        1 s1
+                        0 s2
+                        -1 s5
+                    {endif}
+                {else}
+                    -1 s5
+                {endif}
+            {endif}
+        {else}
+            0 s2
+            -1 s5
+        {endif}
+    {else}
+        l0 ! l4 ! ||
+        {if}
+            0 s1
+        {endif}
+    {endif}
+    l1 (S.L.passenger_cabin_lights_dimmed)
+    l2 (S.L.passenger_cabin_lights_dimming_target)
+    l5 (S.L.passenger_cabin_light_dimming_timer)
+{end}
+
+{macro:passenger_cabin_lights_dimmable__reset}
+    0 (S.L.passenger_cabin_lights_dimmed) (S.L.passenger_cabin_lights_dimming_target)
+    -1 (S.L.passenger_cabin_light_dimming_timer)
+{end}
